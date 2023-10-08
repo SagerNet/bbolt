@@ -295,9 +295,7 @@ func Open(path string, mode os.FileMode, options *Options) (*DB, error) {
 // to read the first meta page firstly. If the first page is invalid,
 // then it tries to read the second page using the default page size.
 func (db *DB) getPageSize() (int, error) {
-	var (
-		meta0CanRead, meta1CanRead bool
-	)
+	var meta0CanRead, meta1CanRead bool
 
 	// Read the first meta page to determine the page size.
 	if pgSize, canRead, err := db.getPageSizeFromFirstMeta(); err != nil {
@@ -425,7 +423,7 @@ func (db *DB) mmap(minsz int) (err error) {
 	if err != nil {
 		return err
 	}
-	var size = fileSize
+	size := fileSize
 	if size < minsz {
 		size = minsz
 	}
@@ -979,7 +977,7 @@ func (b *batch) run() {
 
 retry:
 	for len(b.calls) > 0 {
-		var failIdx = -1
+		failIdx := -1
 		err := b.db.Update(func(tx *Tx) error {
 			for i, c := range b.calls {
 				if err := safelyCall(c.fn, tx); err != nil {
@@ -1110,7 +1108,7 @@ func (db *DB) allocate(txid common.Txid, count int) (*common.Page, error) {
 
 	// Resize mmap() if we're at the end.
 	p.SetId(db.rwtx.meta.Pgid())
-	var minsz = int((p.Id()+common.Pgid(count))+1) * db.pageSize
+	minsz := int((p.Id()+common.Pgid(count))+1) * db.pageSize
 	if minsz >= db.datasz {
 		if err := db.mmap(minsz); err != nil {
 			return nil, fmt.Errorf("mmap allocate error: %s", err)

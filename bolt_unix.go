@@ -9,9 +9,8 @@ import (
 	"time"
 	"unsafe"
 
-	"golang.org/x/sys/unix"
-
 	"github.com/sagernet/bbolt/errors"
+	"golang.org/x/sys/unix"
 )
 
 // flock acquires an advisory lock on a file descriptor.

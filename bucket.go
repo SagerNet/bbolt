@@ -45,7 +45,7 @@ type Bucket struct {
 
 // newBucket returns a new bucket associated with a transaction.
 func newBucket(tx *Tx) Bucket {
-	var b = Bucket{tx: tx, FillPercent: DefaultFillPercent}
+	b := Bucket{tx: tx, FillPercent: DefaultFillPercent}
 	if tx.writable {
 		b.buckets = make(map[string]*Bucket)
 		b.nodes = make(map[common.Pgid]*node)
@@ -102,7 +102,7 @@ func (b *Bucket) Bucket(name []byte) *Bucket {
 	}
 
 	// Otherwise create a bucket and cache it.
-	var child = b.openBucket(v)
+	child := b.openBucket(v)
 	if b.buckets != nil {
 		b.buckets[string(name)] = child
 	}
@@ -113,7 +113,7 @@ func (b *Bucket) Bucket(name []byte) *Bucket {
 // Helper method that re-interprets a sub-bucket value
 // from a parent into a Bucket
 func (b *Bucket) openBucket(value []byte) *Bucket {
-	var child = newBucket(b.tx)
+	child := newBucket(b.tx)
 
 	// Unaligned access requires a copy to be made.
 	const unalignedMask = unsafe.Alignof(struct {
@@ -167,12 +167,12 @@ func (b *Bucket) CreateBucket(key []byte) (*Bucket, error) {
 	}
 
 	// Create empty, inline bucket.
-	var bucket = Bucket{
+	bucket := Bucket{
 		InBucket:    &common.InBucket{},
 		rootNode:    &node{isLeaf: true},
 		FillPercent: DefaultFillPercent,
 	}
-	var value = bucket.write()
+	value := bucket.write()
 
 	// Insert into node.
 	// Tip: Use a new variable `newKey` instead of reusing the existing `key` to prevent
@@ -213,7 +213,7 @@ func (b *Bucket) CreateBucketIfNotExists(key []byte) (*Bucket, error) {
 	// Return an error if there is an existing non-bucket key.
 	if bytes.Equal(key, k) {
 		if (flags & common.BucketLeafFlag) != 0 {
-			var child = b.openBucket(v)
+			child := b.openBucket(v)
 			if b.buckets != nil {
 				b.buckets[string(key)] = child
 			}
@@ -224,12 +224,12 @@ func (b *Bucket) CreateBucketIfNotExists(key []byte) (*Bucket, error) {
 	}
 
 	// Create empty, inline bucket.
-	var bucket = Bucket{
+	bucket := Bucket{
 		InBucket:    &common.InBucket{},
 		rootNode:    &node{isLeaf: true},
 		FillPercent: DefaultFillPercent,
 	}
-	var value = bucket.write()
+	value := bucket.write()
 
 	// Insert into node.
 	// Tip: Use a new variable `newKey` instead of reusing the existing `key` to prevent
@@ -557,7 +557,7 @@ func (b *Bucket) forEachPageNode(fn func(*common.Page, *node, int)) {
 }
 
 func (b *Bucket) _forEachPageNode(pgId common.Pgid, depth int, fn func(*common.Page, *node, int)) {
-	var p, n = b.pageNode(pgId)
+	p, n := b.pageNode(pgId)
 
 	// Execute function.
 	fn(p, n, depth)
@@ -597,7 +597,7 @@ func (b *Bucket) spill() error {
 
 			// Update the child bucket header in this bucket.
 			value = make([]byte, unsafe.Sizeof(common.InBucket{}))
-			var bucket = (*common.InBucket)(unsafe.Pointer(&value[0]))
+			bucket := (*common.InBucket)(unsafe.Pointer(&value[0]))
 			*bucket = *child.InBucket
 		}
 
@@ -607,7 +607,7 @@ func (b *Bucket) spill() error {
 		}
 
 		// Update parent node.
-		var c = b.Cursor()
+		c := b.Cursor()
 		k, _, flags := c.seek([]byte(name))
 		if !bytes.Equal([]byte(name), k) {
 			panic(fmt.Sprintf("misplaced bucket header: %x -> %x", []byte(name), k))
@@ -641,7 +641,7 @@ func (b *Bucket) spill() error {
 // inlineable returns true if a bucket is small enough to be written inline
 // and if it contains no subbuckets. Otherwise, returns false.
 func (b *Bucket) inlineable() bool {
-	var n = b.rootNode
+	n := b.rootNode
 
 	// Bucket must only contain a single leaf node.
 	if n == nil || !n.isLeaf {
@@ -650,7 +650,7 @@ func (b *Bucket) inlineable() bool {
 
 	// Bucket is not inlineable if it contains subbuckets or if it goes beyond
 	// our threshold for inline bucket size.
-	var size = common.PageHeaderSize
+	size := common.PageHeaderSize
 	for _, inode := range n.inodes {
 		size += common.LeafPageElementSize + uintptr(len(inode.Key())) + uintptr(len(inode.Value()))
 
@@ -672,15 +672,15 @@ func (b *Bucket) maxInlineBucketSize() uintptr {
 // write allocates and writes a bucket to a byte slice.
 func (b *Bucket) write() []byte {
 	// Allocate the appropriate size.
-	var n = b.rootNode
-	var value = make([]byte, common.BucketHeaderSize+n.size())
+	n := b.rootNode
+	value := make([]byte, common.BucketHeaderSize+n.size())
 
 	// Write a bucket header.
-	var bucket = (*common.InBucket)(unsafe.Pointer(&value[0]))
+	bucket := (*common.InBucket)(unsafe.Pointer(&value[0]))
 	*bucket = *b.InBucket
 
 	// Convert byte slice to a fake page and write the root node.
-	var p = (*common.Page)(unsafe.Pointer(&value[common.BucketHeaderSize]))
+	p := (*common.Page)(unsafe.Pointer(&value[common.BucketHeaderSize]))
 	n.write(p)
 
 	return value
@@ -714,7 +714,7 @@ func (b *Bucket) node(pgId common.Pgid, parent *node) *node {
 	}
 
 	// Use the inline page if this is an inline bucket.
-	var p = b.page
+	p := b.page
 	if p == nil {
 		p = b.tx.page(pgId)
 	}
@@ -735,7 +735,7 @@ func (b *Bucket) free() {
 		return
 	}
 
-	var tx = b.tx
+	tx := b.tx
 	b.forEachPageNode(func(p *common.Page, n *node, _ int) {
 		if p != nil {
 			tx.db.freelist.free(tx.meta.Txid(), p)
@@ -828,7 +828,7 @@ func (s *BucketStats) Add(other BucketStats) {
 
 // cloneBytes returns a copy of a given slice.
 func cloneBytes(v []byte) []byte {
-	var clone = make([]byte, len(v))
+	clone := make([]byte, len(v))
 	copy(clone, v)
 	return clone
 }

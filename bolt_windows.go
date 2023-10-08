@@ -7,9 +7,8 @@ import (
 	"time"
 	"unsafe"
 
-	"golang.org/x/sys/windows"
-
 	"github.com/sagernet/bbolt/errors"
+	"golang.org/x/sys/windows"
 )
 
 // fdatasync flushes written data to a file descriptor.

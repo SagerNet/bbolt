@@ -72,7 +72,8 @@ func (tx *Tx) check(kvStringer KVStringer, ch chan error) {
 }
 
 func (tx *Tx) checkBucket(b *Bucket, reachable map[common.Pgid]*common.Page, freed map[common.Pgid]bool,
-	kvStringer KVStringer, ch chan error) {
+	kvStringer KVStringer, ch chan error,
+) {
 	// Ignore inline buckets.
 	if b.RootPage() == 0 {
 		return
@@ -86,7 +87,7 @@ func (tx *Tx) checkBucket(b *Bucket, reachable map[common.Pgid]*common.Page, fre
 
 		// Ensure each page is only referenced once.
 		for i := common.Pgid(0); i <= common.Pgid(p.Overflow()); i++ {
-			var id = p.Id() + i
+			id := p.Id() + i
 			if _, ok := reachable[id]; ok {
 				ch <- fmt.Errorf("page %d: multiple references (stack: %v)", int(id), stack)
 			}
@@ -127,8 +128,8 @@ func (tx *Tx) recursivelyCheckPages(pgId common.Pgid, keyToString func([]byte) s
 //     `pagesStack` is expected to contain IDs of pages from the tree root to `pgid` for the clean debugging message.
 func (tx *Tx) recursivelyCheckPagesInternal(
 	pgId common.Pgid, minKeyClosed, maxKeyOpen []byte, pagesStack []common.Pgid,
-	keyToString func([]byte) string, ch chan error) (maxKeyInSubtree []byte) {
-
+	keyToString func([]byte) string, ch chan error,
+) (maxKeyInSubtree []byte) {
 	p := tx.page(pgId)
 	pagesStack = append(pagesStack, pgId)
 	switch {

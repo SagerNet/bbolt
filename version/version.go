@@ -1,6 +1,4 @@
 package version
 
-var (
-	// Version shows the last bbolt binary version released.
-	Version = "1.3.7"
-)
+// Version shows the last bbolt binary version released.
+var Version = "1.3.7"
