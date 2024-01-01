@@ -125,7 +125,6 @@ type DB struct {
 	opened   bool
 	rwtx     *Tx
 	txs      []*Tx
-	stats    Stats
 
 	freelist     *freelist
 	freelistLoad sync.Once
@@ -138,7 +137,6 @@ type DB struct {
 	rwlock   sync.Mutex   // Allows only one writer at a time.
 	metalock sync.Mutex   // Protects meta page access.
 	mmaplock sync.RWMutex // Protects mmap access during remapping.
-	statlock sync.RWMutex // Protects stats access.
 
 	ops struct {
 		writeAt func(b []byte, off int64) (n int, err error)
@@ -392,7 +390,6 @@ func (db *DB) loadFreelist() {
 			// Read free list from freelist page.
 			db.freelist.read(db.page(db.meta().Freelist()))
 		}
-		db.stats.FreePageN = db.freelist.free_count()
 	})
 }
 
@@ -734,16 +731,9 @@ func (db *DB) beginTx() (*Tx, error) {
 
 	// Keep track of transaction until it closes.
 	db.txs = append(db.txs, t)
-	n := len(db.txs)
 
 	// Unlock the meta pages.
 	db.metalock.Unlock()
-
-	// Update the transaction stats.
-	db.statlock.Lock()
-	db.stats.TxN++
-	db.stats.OpenTxN = n
-	db.statlock.Unlock()
 
 	return t, nil
 }
@@ -827,16 +817,9 @@ func (db *DB) removeTx(tx *Tx) {
 			break
 		}
 	}
-	n := len(db.txs)
 
 	// Unlock the meta pages.
 	db.metalock.Unlock()
-
-	// Merge statistics.
-	db.statlock.Lock()
-	db.stats.OpenTxN = n
-	db.stats.TxStats.add(&tx.stats)
-	db.statlock.Unlock()
 }
 
 // Update executes a function within the context of a read-write managed transaction.
@@ -1037,14 +1020,6 @@ func safelyCall(fn func(*Tx) error, tx *Tx) (err error) {
 // This is not necessary under normal operation, however, if you use NoSync
 // then it allows you to force the database file to sync against the disk.
 func (db *DB) Sync() error { return fdatasync(db) }
-
-// Stats retrieves ongoing performance stats for the database.
-// This is only updated when a transaction closes.
-func (db *DB) Stats() Stats {
-	db.statlock.RLock()
-	defer db.statlock.RUnlock()
-	return db.stats
-}
 
 // This is for internal access to the raw data bytes from the C cursor, use
 // carefully, or not at all.

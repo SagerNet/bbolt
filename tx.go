@@ -30,7 +30,6 @@ type Tx struct {
 	meta           *common.Meta
 	root           Bucket
 	pages          map[common.Pgid]*common.Page
-	stats          TxStats
 	commitHandlers []func()
 
 	// WriteFlag specifies the flag for write-related methods like WriteTo().
@@ -91,11 +90,6 @@ func (tx *Tx) Cursor() *Cursor {
 	return tx.root.Cursor()
 }
 
-// Stats retrieves a copy of the current transaction statistics.
-func (tx *Tx) Stats() TxStats {
-	return tx.stats
-}
-
 // Bucket retrieves a bucket by name.
 // Returns nil if the bucket does not exist.
 // The bucket instance is only valid for the lifetime of the transaction.
@@ -151,21 +145,15 @@ func (tx *Tx) Commit() error {
 	// TODO(benbjohnson): Use vectorized I/O to write out dirty pages.
 
 	// Rebalance nodes which have had deletions.
-	startTime := time.Now()
 	tx.root.rebalance()
-	if tx.stats.GetRebalance() > 0 {
-		tx.stats.IncRebalanceTime(time.Since(startTime))
-	}
 
 	opgid := tx.meta.Pgid()
 
 	// spill data onto dirty pages.
-	startTime = time.Now()
 	if err := tx.root.spill(); err != nil {
 		tx.rollback()
 		return err
 	}
-	tx.stats.IncSpillTime(time.Since(startTime))
 
 	// Free the old root bucket.
 	tx.meta.RootBucket().SetRootPage(tx.root.RootPage())
@@ -197,7 +185,6 @@ func (tx *Tx) Commit() error {
 	}
 
 	// Write dirty pages to disk.
-	startTime = time.Now()
 	if err := tx.write(); err != nil {
 		tx.rollback()
 		return err
@@ -224,7 +211,6 @@ func (tx *Tx) Commit() error {
 		tx.rollback()
 		return err
 	}
-	tx.stats.IncWriteTime(time.Since(startTime))
 
 	// Finalize the transaction.
 	tx.close()
@@ -304,23 +290,9 @@ func (tx *Tx) close() {
 		return
 	}
 	if tx.writable {
-		// Grab freelist stats.
-		freelistFreeN := tx.db.freelist.free_count()
-		freelistPendingN := tx.db.freelist.pending_count()
-		freelistAlloc := tx.db.freelist.size()
-
 		// Remove transaction ref & writer lock.
 		tx.db.rwtx = nil
 		tx.db.rwlock.Unlock()
-
-		// Merge statistics.
-		tx.db.statlock.Lock()
-		tx.db.stats.FreePageN = freelistFreeN
-		tx.db.stats.PendingPageN = freelistPendingN
-		tx.db.stats.FreeAlloc = (freelistFreeN + freelistPendingN) * tx.db.pageSize
-		tx.db.stats.FreelistInuse = freelistAlloc
-		tx.db.stats.TxStats.add(&tx.stats)
-		tx.db.statlock.Unlock()
 	} else {
 		tx.db.removeTx(tx)
 	}
@@ -421,11 +393,6 @@ func (tx *Tx) allocate(count int) (*common.Page, error) {
 
 	// Save to our page cache.
 	tx.pages[p.Id()] = p
-
-	// Update statistics.
-	tx.stats.IncPageCount(int64(count))
-	tx.stats.IncPageAlloc(int64(count * tx.db.pageSize))
-
 	return p, nil
 }
 
@@ -457,9 +424,6 @@ func (tx *Tx) write() error {
 			if _, err := tx.db.ops.writeAt(buf, offset); err != nil {
 				return err
 			}
-
-			// Update statistics.
-			tx.stats.IncWrite(1)
 
 			// Exit inner for loop if we've written all the chunks.
 			rem -= sz
@@ -516,9 +480,6 @@ func (tx *Tx) writeMeta() error {
 			return err
 		}
 	}
-
-	// Update statistics.
-	tx.stats.IncWrite(1)
 
 	return nil
 }

@@ -72,9 +72,6 @@ func (b *Bucket) Writable() bool {
 // The cursor is only valid as long as the transaction is open.
 // Do not use a cursor after the transaction is closed.
 func (b *Bucket) Cursor() *Cursor {
-	// Update transaction statistics.
-	b.tx.stats.IncCursorCount(1)
-
 	// Allocate and return a cursor.
 	return &Cursor{
 		bucket: b,
@@ -722,9 +719,6 @@ func (b *Bucket) node(pgId common.Pgid, parent *node) *node {
 	// Read the page into the node and cache it.
 	n.read(p)
 	b.nodes[pgId] = n
-
-	// Update statistics.
-	b.tx.stats.IncNodeCount(1)
 
 	return n
 }
