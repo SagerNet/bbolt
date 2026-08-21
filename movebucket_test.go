@@ -9,9 +9,9 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"go.etcd.io/bbolt"
-	"go.etcd.io/bbolt/errors"
-	"go.etcd.io/bbolt/internal/btesting"
+	"github.com/sagernet/bbolt"
+	"github.com/sagernet/bbolt/errors"
+	"github.com/sagernet/bbolt/internal/btesting"
 )
 
 func TestTx_MoveBucket(t *testing.T) {

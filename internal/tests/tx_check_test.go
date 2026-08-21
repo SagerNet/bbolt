@@ -6,10 +6,10 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	bolt "go.etcd.io/bbolt"
-	"go.etcd.io/bbolt/internal/btesting"
-	"go.etcd.io/bbolt/internal/guts_cli"
-	"go.etcd.io/bbolt/internal/surgeon"
+	bolt "github.com/sagernet/bbolt"
+	"github.com/sagernet/bbolt/internal/btesting"
+	"github.com/sagernet/bbolt/internal/guts_cli"
+	"github.com/sagernet/bbolt/internal/surgeon"
 )
 
 func TestTx_RecursivelyCheckPages_MisplacedPage(t *testing.T) {

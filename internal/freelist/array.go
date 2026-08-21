@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"sort"
 
-	"go.etcd.io/bbolt/internal/common"
+	"github.com/sagernet/bbolt/internal/common"
 )
 
 type array struct {

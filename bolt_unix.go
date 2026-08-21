@@ -10,8 +10,8 @@ import (
 
 	"golang.org/x/sys/unix"
 
-	"go.etcd.io/bbolt/errors"
-	"go.etcd.io/bbolt/internal/common"
+	"github.com/sagernet/bbolt/errors"
+	"github.com/sagernet/bbolt/internal/common"
 )
 
 // flock acquires an advisory lock on a file descriptor.

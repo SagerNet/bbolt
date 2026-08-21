@@ -1,8 +1,8 @@
 package bbolt_test
 
 import (
-	bolt "go.etcd.io/bbolt"
-	"go.etcd.io/bbolt/internal/common"
+	bolt "github.com/sagernet/bbolt"
+	"github.com/sagernet/bbolt/internal/common"
 )
 
 // `dumpBucket` dumps all the data, including both key/value data

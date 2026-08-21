@@ -8,9 +8,9 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
-	"go.etcd.io/bbolt/internal/common"
-	"go.etcd.io/bbolt/internal/guts_cli"
-	"go.etcd.io/bbolt/internal/surgeon"
+	"github.com/sagernet/bbolt/internal/common"
+	"github.com/sagernet/bbolt/internal/guts_cli"
+	"github.com/sagernet/bbolt/internal/surgeon"
 )
 
 func newSurgeryCommand() *cobra.Command {
