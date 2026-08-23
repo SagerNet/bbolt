@@ -1034,15 +1034,27 @@ func (b *batch) run() {
 retry:
 	for len(b.calls) > 0 {
 		var failIdx = -1
-		err := b.db.Update(func(tx *Tx) error {
-			for i, c := range b.calls {
-				if err := safelyCall(c.fn, tx); err != nil {
-					failIdx = i
-					return err
+		// The batch runs on its own goroutine, so a panic raised by the
+		// transaction outside the calls themselves (typically by Commit, on a
+		// corrupted database) cannot reach any caller and would terminate the
+		// process. Recover it and deliver it to every caller as a
+		// PanickedError instead.
+		err := func() (err error) {
+			defer func() {
+				if p := recover(); p != nil {
+					err = PanickedError{Reason: p}
 				}
-			}
-			return nil
-		})
+			}()
+			return b.db.Update(func(tx *Tx) error {
+				for i, c := range b.calls {
+					if err := safelyCall(c.fn, tx); err != nil {
+						failIdx = i
+						return err
+					}
+				}
+				return nil
+			})
+		}()
 
 		if failIdx >= 0 {
 			// take the failing transaction out of the batch. it's
@@ -1068,21 +1080,25 @@ retry:
 // callers.
 var trySolo = errors.New("batch function returned an error and should be re-run solo")
 
-type panicked struct {
-	reason interface{}
+// PanickedError is the error returned from Batch when the batch transaction
+// panics outside the batched functions, and the error reported by Tx.Check
+// when the check panics. Update and View run the transaction on the caller's
+// goroutine and let such panics propagate.
+type PanickedError struct {
+	Reason interface{}
 }
 
-func (p panicked) Error() string {
-	if err, ok := p.reason.(error); ok {
+func (p PanickedError) Error() string {
+	if err, ok := p.Reason.(error); ok {
 		return err.Error()
 	}
-	return fmt.Sprintf("panic: %v", p.reason)
+	return fmt.Sprintf("panic: %v", p.Reason)
 }
 
 func safelyCall(fn func(*Tx) error, tx *Tx) (err error) {
 	defer func() {
 		if p := recover(); p != nil {
-			err = panicked{p}
+			err = PanickedError{Reason: p}
 		}
 	}()
 	return fn(tx)
