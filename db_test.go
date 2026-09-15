@@ -25,6 +25,7 @@ import (
 	berrors "github.com/sagernet/bbolt/errors"
 	"github.com/sagernet/bbolt/internal/btesting"
 	"github.com/sagernet/bbolt/internal/common"
+	"github.com/sagernet/bbolt/internal/guts_cli"
 )
 
 // pageSize is the size of one page in the data file.
@@ -240,6 +241,44 @@ func TestOpen_ErrChecksum(t *testing.T) {
 	if _, err := bolt.Open(path, 0600, nil); err != berrors.ErrChecksum {
 		t.Fatalf("unexpected error: %s", err)
 	}
+}
+
+// Ensure that opening a file whose meta page points the freelist at a page
+// that is not a freelist page returns ErrInvalid instead of panicking.
+func TestOpen_ErrInvalid_FreelistPage(t *testing.T) {
+	bucketName := []byte("data")
+	db := btesting.MustCreateDBWithOption(t, &bolt.Options{PageSize: 4096})
+	err := db.Fill(bucketName, 1, 100,
+		func(tx int, k int) []byte { return []byte(fmt.Sprintf("%04d", k)) },
+		func(tx int, k int) []byte { return make([]byte, 100) },
+	)
+	require.NoError(t, err)
+	bucketRootPageId := mustGetBucketRootPage(t, db.DB, bucketName)
+	path := db.Path()
+	db.MustClose()
+
+	t.Log("Pointing the freelist of the active meta page at the bucket root page.")
+	_, activeMetaPageId, err := guts_cli.GetRootPage(path)
+	require.NoError(t, err)
+	_, metaPageBuf, err := guts_cli.ReadPage(path, uint64(activeMetaPageId))
+	require.NoError(t, err)
+	activeMeta := common.LoadPageMeta(metaPageBuf)
+	activeMeta.SetFreelist(bucketRootPageId)
+	activeMeta.SetChecksum(activeMeta.Sum64())
+	require.NoError(t, guts_cli.WritePage(path, metaPageBuf))
+
+	_, err = bolt.Open(path, 0600, &bolt.Options{PageSize: 4096})
+	require.ErrorIs(t, err, berrors.ErrInvalid)
+}
+
+// Ensure that opening a file without a synced freelist returns ErrInvalid
+// when the scan that rebuilds the freelist runs into a bucket nested in itself.
+func TestOpen_ErrInvalid_NoFreelistSync_BucketCycle(t *testing.T) {
+	options := &bolt.Options{PageSize: 4096, NoFreelistSync: true}
+	path := createBucketCycle(t, options)
+
+	_, err := bolt.Open(path, 0600, options)
+	require.ErrorIs(t, err, berrors.ErrInvalid)
 }
 
 // Ensure that it can read the page size from the second meta page if the first one is invalid.

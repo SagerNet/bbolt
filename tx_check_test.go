@@ -3,6 +3,7 @@ package bbolt_test
 import (
 	"fmt"
 	"math/rand"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -155,6 +156,112 @@ func TestTx_Check_Panic(t *testing.T) {
 	// Manually close the db, otherwise the PostTestCleanup will
 	// check the db again and accordingly fail the test.
 	db.MustClose()
+}
+
+func TestTx_Check_BucketCycle(t *testing.T) {
+	options := &bbolt.Options{PageSize: 4096}
+	path := createBucketCycle(t, options)
+
+	db, err := bbolt.Open(path, 0600, options)
+	require.NoError(t, err)
+	defer db.Close()
+
+	requireCheckReports(t, db, "multiple references")
+}
+
+func TestTx_Check_BranchPageCycle(t *testing.T) {
+	bucketName := []byte("data")
+	options := &bbolt.Options{PageSize: 4096}
+	db := btesting.MustCreateDBWithOption(t, options)
+	err := db.Fill(bucketName, 1, 100,
+		func(tx int, k int) []byte { return []byte(fmt.Sprintf("%04d", k)) },
+		func(tx int, k int) []byte { return make([]byte, 100) },
+	)
+	require.NoError(t, err)
+	bucketRootPageId := mustGetBucketRootPage(t, db.DB, bucketName)
+	path := db.Path()
+	db.MustClose()
+
+	t.Log("Pointing the last child of the bucket root page back at the root page.")
+	bucketRootPage, bucketRootPageBuf, err := guts_cli.ReadPage(path, uint64(bucketRootPageId))
+	require.NoError(t, err)
+	require.True(t, bucketRootPage.IsBranchPage())
+	bucketRootPage.BranchPageElement(bucketRootPage.Count() - 1).SetPgid(bucketRootPageId)
+	require.NoError(t, guts_cli.WritePage(path, bucketRootPageBuf))
+
+	corruptedDB, err := bbolt.Open(path, 0600, options)
+	require.NoError(t, err)
+	defer corruptedDB.Close()
+
+	requireCheckReports(t, corruptedDB, "multiple references")
+}
+
+// createBucketCycle creates a db file in which a child bucket has the root page
+// of its parent bucket as its own root page, so the bucket contains itself.
+func createBucketCycle(t testing.TB, options *bbolt.Options) string {
+	parentBucketName := []byte("parent")
+	childBucketName := []byte("child")
+	db := btesting.MustCreateDBWithOption(t, options)
+	err := db.Update(func(tx *bbolt.Tx) error {
+		parentBucket, bErr := tx.CreateBucket(parentBucketName)
+		if bErr != nil {
+			return bErr
+		}
+		childBucket, bErr := parentBucket.CreateBucket(childBucketName)
+		if bErr != nil {
+			return bErr
+		}
+		// Enough values to keep both buckets from being inlined, few enough
+		// to keep each of them on a single leaf page.
+		for i := 0; i < 20; i++ {
+			key := []byte(fmt.Sprintf("%04d", i))
+			if pErr := parentBucket.Put(key, make([]byte, 100)); pErr != nil {
+				return pErr
+			}
+			if pErr := childBucket.Put(key, make([]byte, 100)); pErr != nil {
+				return pErr
+			}
+		}
+		return nil
+	})
+	require.NoError(t, err)
+	parentRootPageId := mustGetBucketRootPage(t, db.DB, parentBucketName)
+	path := db.Path()
+	db.MustClose()
+
+	parentRootPage, parentRootPageBuf, err := guts_cli.ReadPage(path, uint64(parentRootPageId))
+	require.NoError(t, err)
+	require.True(t, parentRootPage.IsLeafPage())
+	linked := false
+	for i := uint16(0); i < parentRootPage.Count(); i++ {
+		element := parentRootPage.LeafPageElement(i)
+		if string(element.Key()) != string(childBucketName) {
+			continue
+		}
+		require.True(t, element.IsBucketEntry())
+		common.LoadBucket(element.Value()).SetRootPage(parentRootPageId)
+		linked = true
+	}
+	require.True(t, linked)
+	require.NoError(t, guts_cli.WritePage(path, parentRootPageBuf))
+	return path
+}
+
+func requireCheckReports(t testing.TB, db *bbolt.DB, message string) {
+	var cErrs []error
+	err := db.View(func(tx *bbolt.Tx) error {
+		for cErr := range tx.Check() {
+			cErrs = append(cErrs, cErr)
+		}
+		return nil
+	})
+	require.NoError(t, err)
+	for _, cErr := range cErrs {
+		if strings.Contains(cErr.Error(), message) {
+			return
+		}
+	}
+	t.Fatalf("check did not report %q: %v", message, cErrs)
 }
 
 // corruptRandomLeafPage corrupts one random leaf page.
