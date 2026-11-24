@@ -314,10 +314,17 @@ func (tx *Tx) nonPhysicalRollback() {
 	if tx.db == nil {
 		return
 	}
+	var completed bool
+	defer func() {
+		if !completed && tx.writable {
+			tx.db.failed = true
+		}
+		tx.close()
+	}()
 	if tx.writable {
 		tx.db.freelist.Rollback(tx.meta.Txid())
 	}
-	tx.close()
+	completed = true
 }
 
 // rollback needs to reload the free pages from disk in case some system error happens like fsync error.
@@ -325,6 +332,13 @@ func (tx *Tx) rollback() {
 	if tx.db == nil {
 		return
 	}
+	var completed bool
+	defer func() {
+		if !completed && tx.writable {
+			tx.db.failed = true
+		}
+		tx.close()
+	}()
 	if tx.writable {
 		tx.db.freelist.Rollback(tx.meta.Txid())
 		// When mmap fails, the `data`, `dataref` and `datasz` may be reset to
@@ -344,7 +358,7 @@ func (tx *Tx) rollback() {
 			}
 		}
 	}
-	tx.close()
+	completed = true
 }
 
 func (tx *Tx) close() {

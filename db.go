@@ -132,6 +132,7 @@ type DB struct {
 	meta1    *common.Meta
 	pageSize int
 	opened   bool
+	failed   bool
 	rwtx     *Tx
 	stats    *Stats
 
@@ -873,8 +874,8 @@ func (db *DB) beginRWTx() (*Tx, error) {
 	db.metalock.Lock()
 	defer db.metalock.Unlock()
 
-	// Exit if the database is not open yet.
-	if !db.opened {
+	// Exit if the database is not open yet or left inconsistent by a panicked rollback.
+	if !db.opened || db.failed {
 		db.rwlock.Unlock()
 		return nil, berrors.ErrDatabaseNotOpen
 	}
